@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zenith-PC-Control</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    .container { padding: 20px; max-width: 900px; margin: auto; }
+    .card { background: #1e293b; padding: 16px; border-radius: 12px; margin-bottom: 12px; }
+    button { padding: 8px 12px; border: none; border-radius: 8px; }
+    select, input { padding: 6px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; }
+    .log { max-height: 200px; overflow-y: scroll; background: #0f172a; padding: 8px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Zenith-PC-Control</h1>
+    <div class="card">
+      <h2>Estado</h2>
+      <p id="pcStatus">Estado: --</p>
+      <p id="uptime">Uptime diario: --</p>
+    </div>
+    <div class="card">
+      <h2>Modo Mantenimiento</h2>
+      <label>
+        <input type="checkbox" id="maintenance" />
+        Activar mantenimiento (deshabilita power recovery y horarios)
+      </label>
+    </div>
+    <div class="card">
+      <h2>Zona Horaria</h2>
+      <label>Offset GMT
+        <select id="offset"></select>
+      </label>
+    </div>
+    <div class="card">
+      <h2>Logs</h2>
+      <div id="logs" class="log"></div>
+    </div>
+  </div>
+
+  <script>
+    const offsetSelect = document.getElementById('offset');
+    for (let i = -12; i <= 14; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `GMT ${i >= 0 ? '+' : ''}${i}`;
+      offsetSelect.appendChild(opt);
+    }
+
+    const ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      document.getElementById('pcStatus').textContent = `Estado: ${data.pcStatus}`;
+      document.getElementById('uptime').textContent = `Uptime diario: ${data.dailyUptime}`;
+      if (data.logs) {
+        document.getElementById('logs').textContent = data.logs;
+      }
+    };
+
+    async function loadConfig() {
+      const resp = await fetch('/api/config');
+      const config = await resp.json();
+      document.getElementById('maintenance').checked = config.maintenanceMode;
+      offsetSelect.value = config.ntpOffset;
+    }
+
+    document.getElementById('maintenance').addEventListener('change', async (e) => {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `maintenanceMode=${e.target.checked ? 1 : 0}`
+      });
+      if (navigator.vibrate) { navigator.vibrate(50); }
+    });
+
+    offsetSelect.addEventListener('change', async (e) => {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `ntpOffset=${e.target.value}`
+      });
+    });
+
+    async function loadLogs() {
+      const resp = await fetch('/api/logs');
+      const text = await resp.text();
+      document.getElementById('logs').textContent = text;
+    }
+
+    loadConfig();
+    loadLogs();
+  </script>
+</body>
+</html>
